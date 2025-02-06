@@ -30,4 +30,4 @@ English:
 ## Contributing / Внесок
 English: Contributions are always welcome! Please follow the project guidelines and create a pull request.
 
-Українська: Внески завжди вітаються! Будь ласка, дотримуйтесь правил проекту і створюйте pull request.
+Українська: Внески завжди вітаються! Будь ласка, дотримуйтесь правил проєкту і створюйте pull request.
