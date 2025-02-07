@@ -1,0 +1,25 @@
+[
+    {
+        "date": "2025-02-07",
+        "tasks": [
+            {
+                "name": "Implement feature",
+                "duration": 3,
+                "deadline": "2025-02-08T12:00:00",
+                "priority": "high"
+            },
+            {
+                "name": "Write docs",
+                "duration": 1,
+                "deadline": "2025-02-08T14:00:00",
+                "priority": "medium"
+            },
+            {
+                "name": "Fix bug",
+                "duration": 2,
+                "deadline": "2025-02-08T18:00:00",
+                "priority": "high"
+            }
+        ]
+    }
+]

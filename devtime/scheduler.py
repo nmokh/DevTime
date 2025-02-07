@@ -1,19 +1,22 @@
 from datetime import datetime
 
 class Task:
-    PRIORITIES = {"low", "medium", "high"}  # Allowed priority levels
+    PRIORITIES = {"low", "medium", "high"}
 
     def __init__(self, name: str, duration: int, deadline: str, priority: str = "medium"):
         if priority not in self.PRIORITIES:
             raise ValueError(f"Invalid priority: {priority}. Choose from {self.PRIORITIES}")
         
-        self.name = name  # Task name
-        self.duration = duration  # Task duration in hours
-        self.deadline = datetime.strptime(deadline, "%Y-%m-%d %H:%M")  # Convert deadline string to datetime
-        self.priority = priority  # Task priority (low, medium, high)
+        self.name = name
+        self.duration = duration
+        
+        # Перетворюємо строку у datetime
+        if isinstance(deadline, str):
+            self.deadline = datetime.strptime(deadline, "%Y-%m-%d %H:%M")
+        else:
+            self.deadline = deadline  # Якщо вже datetime, залишаємо як є
 
-    def __repr__(self):
-        return f"Task({self.name}, {self.duration}h, {self.deadline}, {self.priority})"
+        self.priority = priority
 
 class WorkSchedule:
     def __init__(self, start_hour=9, end_hour=18, work_block=90, break_time=15, max_daily_hours=8):
@@ -38,12 +41,15 @@ class WorkSchedule:
 
 def generate_schedule(tasks, schedule):
     """Generates an optimal work schedule for the day."""
-    
-    # Filter only current tasks (those that are not overdue)
+
+    # Фільтруємо тільки актуальні завдання
     now = datetime.now()
     tasks = [task for task in tasks if task.deadline >= now]
 
-    # Sort tasks by deadline and priority
+    # Словник для пріоритетів (чим менше число, тим вищий пріоритет)
+    priority_map = {"low": 3, "medium": 2, "high": 1}
+
+    # Сортуємо завдання за дедлайном і пріоритетом
     tasks.sort(key=lambda t: (t.deadline, priority_map[t.priority]))
 
     available_hours = schedule.get_available_hours()
@@ -56,6 +62,6 @@ def generate_schedule(tasks, schedule):
             schedule_plan.append(task)
             used_hours += task.duration
         else:
-            remaining_tasks.append(task)  # Postpone it to the next day
+            remaining_tasks.append(task)  # Переносимо на наступний день
 
     return schedule_plan, remaining_tasks
