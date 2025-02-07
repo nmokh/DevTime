@@ -1,6 +1,6 @@
 import argparse
 from datetime import datetime
-from devtime.scheduler import Task
+from devtime.scheduler import Task, generate_schedule, WorkSchedule
 from devtime.storage import save_tasks, load_tasks
 
 def add_task(args):
@@ -18,7 +18,18 @@ def add_task(args):
 
 def plan_schedule(args):
     """Handles generating an optimized schedule."""
-    print("Generating optimized schedule...")
+    tasks = load_tasks()
+    schedule = WorkSchedule()
+    planned_tasks, remaining_tasks = generate_schedule(tasks, schedule)
+
+    print("\n📅 Optimized Schedule for Today:")
+    for task in planned_tasks:
+        print(f"- {task.name} ({task.duration}h, deadline: {task.deadline}, priority: {task.priority})")
+
+    if remaining_tasks:
+        print("\n⚠ Some tasks couldn't fit into today’s schedule and will be postponed:")
+        for task in remaining_tasks:
+            print(f"- {task.name} ({task.duration}h, deadline: {task.deadline}, priority: {task.priority})")
 
 def view_history(args):
     """Handles displaying the task history."""
