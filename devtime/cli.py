@@ -1,8 +1,20 @@
 import argparse
+from datetime import datetime
+from devtime.scheduler import Task
+from devtime.storage import save_tasks, load_tasks
 
 def add_task(args):
-    """Handles adding a new task."""
-    print(f"Adding task: {args.name} (Duration: {args.duration}h, Deadline: {args.deadline}, Priority: {args.priority})")
+    """Handles adding a new task and saving it to storage."""
+    try:
+        # Validate and parse the deadline format
+        deadline = datetime.strptime(args.deadline, "%Y-%m-%d %H:%M")
+        tasks = load_tasks()
+        new_task = Task(args.name, args.duration, deadline.strftime("%Y-%m-%d %H:%M"), args.priority)
+        tasks.append(new_task)
+        save_tasks(tasks)
+        print(f"Task added successfully: {new_task}")
+    except ValueError:
+        print("Error: Invalid date format. Use YYYY-MM-DD HH:MM.")
 
 def plan_schedule(args):
     """Handles generating an optimized schedule."""
@@ -10,7 +22,13 @@ def plan_schedule(args):
 
 def view_history(args):
     """Handles displaying the task history."""
-    print("Displaying task history...")
+    tasks = load_tasks()
+    if not tasks:
+        print("No tasks found.")
+    else:
+        print("Task History:")
+        for task in tasks:
+            print(task)
 
 def main():
     """Main function to set up the CLI interface using argparse."""
