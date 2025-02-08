@@ -1,0 +1,6 @@
+Metadata-Version: 2.2
+Name: devtime
+Version: 1.0
+License-File: LICENSE
+Requires-Dist: tabulate
+Dynamic: requires-dist
