@@ -2,7 +2,7 @@ import argparse
 from tabulate import tabulate
 from datetime import datetime
 from devtime.scheduler import Task, generate_schedule, WorkSchedule
-from devtime.storage import save_tasks, load_tasks, save_schedule, load_schedules
+from devtime.storage import save_tasks, load_tasks, save_schedule, load_schedules, load_completed_tasks, save_completed_tasks
 
 def add_task(args):
     """
@@ -21,6 +21,75 @@ def add_task(args):
         print(f"Task added successfully: {new_task}")
     except ValueError:
         print("Error: Invalid date format. Use YYYY-MM-DD HH:MM.")
+
+def delete_task(args):
+    """
+    Deletes a task by its ID.
+
+    Args:
+        args (Namespace): Command-line arguments containing the task ID.
+    """
+    tasks = load_tasks()
+    task_id = args.id
+
+    # Видаляємо завдання з відповідним ID
+    updated_tasks = [task for task in tasks if task.id != task_id]
+
+    if len(updated_tasks) == len(tasks):
+        print(f"⚠ Task with ID {task_id} not found.")
+        return
+
+    save_tasks(updated_tasks)
+    print(f"✅ Task {task_id} deleted successfully.")
+
+def edit_task(args):
+    """
+    Edits an existing task based on user input.
+
+    Args:
+        args (Namespace): Command-line arguments containing task ID and new values.
+    """
+    tasks = load_tasks()
+    task_id = args.id
+
+    for task in tasks:
+        if task.id == task_id:
+            if args.name:
+                task.name = args.name
+            if args.duration:
+                task.duration = args.duration
+            if args.deadline:
+                task.deadline = datetime.strptime(args.deadline, "%Y-%m-%d %H:%M")
+            if args.priority:
+                task.priority = args.priority
+
+            save_tasks(tasks)
+            print(f"✅ Task {task_id} updated successfully.")
+            return
+
+    print(f"⚠ Task with ID {task_id} not found.")
+
+def complete_task(args):
+    """
+    Marks a task as completed.
+
+    Args:
+        args (Namespace): Command-line arguments containing task ID.
+    """
+    tasks = load_tasks()
+    completed_tasks = load_completed_tasks()  # Завантажуємо виконані завдання
+    task_id = args.id
+
+    for task in tasks:
+        if task.id == task_id:
+            completed_tasks.append(task)  # Додаємо виконане завдання до списку
+            tasks.remove(task)  # Видаляємо його зі списку активних завдань
+            save_tasks(tasks)  # Оновлюємо tasks.json
+            save_completed_tasks(completed_tasks)  # Зберігаємо виконані завдання
+            print(f"✅ Task {task_id} marked as completed.")
+            return
+
+    print(f"⚠ Task with ID {task_id} not found.")
 
 def plan_schedule(args):
     """
@@ -128,14 +197,34 @@ def interactive_mode():
                 add_task(argparse.Namespace(name=name, duration=duration, deadline=deadline, priority=priority))
             except ValueError as e:
                 print(f"⚠ Error: {e}")
+        elif command == "edit":
+            task_id = int(input("Task ID: "))
+            name = input("New name (leave empty to keep current): ")
+            duration = input("New duration (leave empty to keep current): ")
+            deadline = input("New deadline (YYYY-MM-DD HH:MM, leave empty to keep current): ")
+            priority = input("New priority (low, medium, high, leave empty to keep current): ")
+
+            edit_task(argparse.Namespace(
+                id=task_id,
+                name=name or None,
+                duration=float(duration) if duration else None,
+                deadline=deadline or None,
+                priority=priority or None
+            ))
+
+        elif command == "delete":
+            task_id = int(input("Task ID: "))
+            delete_task(argparse.Namespace(id=task_id))
+
+        elif command == "complete":
+            task_id = int(input("Task ID: "))
+            complete_task(argparse.Namespace(id=task_id))
         elif command == "plan":
             plan_schedule(None)
         elif command == "schedule":
             view_schedule(None)
         elif command == "history":
             view_history(None)
-        elif command in ["edit", "delete", "complete"]:
-            print(f"⚠ Command '{command}' is not implemented yet! Coming soon.")
         else:
             print("⚠ Invalid command. Type 'help' to see available commands.")
 
@@ -165,6 +254,25 @@ def main():
     add_parser.add_argument("--deadline", type=str, required=True, help="Task deadline (YYYY-MM-DD HH:MM)")
     add_parser.add_argument("--priority", type=str, choices=["low", "medium", "high"], default="medium", help="Task priority")
     add_parser.set_defaults(func=add_task)
+
+    # "delete" command: Delete a task
+    delete_parser = subparsers.add_parser("delete", help="Delete a task")
+    delete_parser.add_argument("id", type=int, help="Task ID")
+    delete_parser.set_defaults(func=delete_task)
+
+    # "edit" command: Edit an existing task
+    edit_parser = subparsers.add_parser("edit", help="Edit a task")
+    edit_parser.add_argument("id", type=int, help="Task ID")
+    edit_parser.add_argument("--name", type=str, help="New task name")
+    edit_parser.add_argument("--duration", type=float, help="New task duration in hours")
+    edit_parser.add_argument("--deadline", type=str, help="New deadline (YYYY-MM-DD HH:MM)")
+    edit_parser.add_argument("--priority", type=str, choices=["low", "medium", "high"], help="New task priority")
+    edit_parser.set_defaults(func=edit_task)
+
+    # "complete" command: Mark a task as completed
+    complete_parser = subparsers.add_parser("complete", help="Mark a task as completed")
+    complete_parser.add_argument("id", type=int, help="Task ID")
+    complete_parser.set_defaults(func=complete_task)
 
     # "plan" command: Generate an optimized schedule
     plan_parser = subparsers.add_parser("plan", help="Generate optimized schedule")

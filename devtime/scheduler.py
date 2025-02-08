@@ -6,7 +6,7 @@ class Task:
     """
     PRIORITIES = {"low", "medium", "high"}
 
-    def __init__(self, name: str, duration: float, deadline: str, priority: str = "medium"):
+    def __init__(self, name: str, duration: float, deadline: str, priority: str = "medium", task_id: int = None):
         """
         Initialize a Task instance.
 
@@ -22,6 +22,8 @@ class Task:
         if priority not in self.PRIORITIES:
             raise ValueError(f"Invalid priority: {priority}. Choose from {self.PRIORITIES}")
         
+        self.id = task_id  # Assign task ID
+
         self.name = name
         self.duration = duration
         
