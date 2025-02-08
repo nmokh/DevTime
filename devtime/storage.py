@@ -2,23 +2,36 @@ import json
 from datetime import datetime
 from devtime.scheduler import Task
 
-TASKS_FILE = "tasks.json"  # Name of the file where tasks will be stored
-SCHEDULES_FILE = "schedules.json"  # File for storing schedules
+TASKS_FILE = "tasks.json"         # File to store tasks
+SCHEDULES_FILE = "schedules.json"   # File to store schedule history
 
 def task_to_dict(task):
     """
-    Converts a Task object into a dictionary, ensuring datetime is stored as an ISO string.
+    Convert a Task object to a dictionary with the deadline in ISO format.
+
+    Args:
+        task (Task): The task to convert.
+
+    Returns:
+        dict: Dictionary representation of the task.
     """
     return {
         "name": task.name,
         "duration": task.duration,
-        "deadline": task.deadline.isoformat(),  # Convert datetime to ISO format
+        "deadline": task.deadline.isoformat(),
         "priority": task.priority
     }
 
 def schedule_to_dict(schedule_date, tasks):
     """
-    Converts a schedule into a dictionary for saving to JSON.
+    Convert a schedule to a dictionary for JSON storage.
+
+    Args:
+        schedule_date (datetime): The date of the schedule.
+        tasks (list[Task]): List of tasks in the schedule.
+
+    Returns:
+        dict: Dictionary representation of the schedule.
     """
     return {
         "date": schedule_date.strftime("%Y-%m-%d"),
@@ -27,31 +40,41 @@ def schedule_to_dict(schedule_date, tasks):
 
 def dict_to_task(data):
     """
-    Converts a dictionary back into a Task object, parsing datetime from an ISO string.
+    Convert a dictionary to a Task object, parsing the deadline from an ISO string.
+
+    Args:
+        data (dict): Dictionary representation of a task.
+
+    Returns:
+        Task: The corresponding Task object.
     """
     deadline_str = data["deadline"]
-    
-    # Check if the deadline is already a datetime object (prevent errors)
+
+    # If the deadline is already a datetime object, format it as a string
     if isinstance(deadline_str, datetime):
         return Task(data["name"], data["duration"], deadline_str.strftime("%Y-%m-%d %H:%M"), data["priority"])
 
-    # Convert from ISO format (JSON serialization)
+    # Convert the ISO formatted string to a datetime object
     try:
-        deadline_str = deadline_str.replace("T", " ")  # Convert "2025-02-07T10:00:00" -> "2025-02-07 10:00:00"
-        deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M:%S")  # Handle seconds
+        # Replace 'T' with a space if present
+        deadline_str = deadline_str.replace("T", " ")
+        deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M:%S")
     except ValueError:
-        deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")  # Fallback for no seconds
+        deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
 
     return Task(
         name=data["name"],
         duration=data["duration"],
-        deadline=deadline_dt.strftime("%Y-%m-%d %H:%M"),  # Convert back to datetime
+        deadline=deadline_dt.strftime("%Y-%m-%d %H:%M"),
         priority=data["priority"]
     )
 
 def save_tasks(tasks):
     """
-    Saves a list of tasks to a JSON file.
+    Save a list of tasks to the tasks JSON file.
+
+    Args:
+        tasks (list[Task]): The tasks to save.
     """
     try:
         with open(TASKS_FILE, "w") as f:
@@ -60,13 +83,19 @@ def save_tasks(tasks):
         print(f"Error saving tasks: {e}")
 
 def save_schedule(schedule_date, tasks):
-    """Зберігає розклад у файл, додаючи новий запис до історії."""
+    """
+    Save a schedule by appending a new entry to the schedule history.
+
+    Args:
+        schedule_date (datetime): The date of the schedule.
+        tasks (list[Task]): The tasks included in the schedule.
+    """
     schedule_data = {
         "date": schedule_date.strftime("%Y-%m-%d"),
         "tasks": [task_to_dict(task) for task in tasks]
     }
 
-    # Завантажуємо попередні розклади
+    # Load existing schedules
     schedules = load_schedules()
     schedules.append(schedule_data)
 
@@ -77,7 +106,12 @@ def save_schedule(schedule_date, tasks):
         print(f"Error saving schedule: {e}")
 
 def load_tasks():
-    """Loads tasks from JSON file and converts them into Task objects."""
+    """
+    Load tasks from the tasks JSON file and convert them into Task objects.
+
+    Returns:
+        list[Task]: List of tasks.
+    """
     try:
         with open(TASKS_FILE, "r") as f:
             data = json.load(f)
@@ -87,16 +121,18 @@ def load_tasks():
         return []
 
 def load_schedules():
-
     """
-    Loads a list of saved schedules from a JSON file.
+    Load the list of saved schedules from the schedules JSON file.
+
+    Returns:
+        list: List of schedules.
     """
     try:
         with open(SCHEDULES_FILE, "r") as f:
             data = json.load(f)
-            return data  # Return the list of schedules
+            return data
     except FileNotFoundError:
-        return []  # If the file doesn't exist, return an empty list
+        return []
     except json.JSONDecodeError:
         print("Warning: JSON file is corrupted. Resetting schedule list.")
         return []

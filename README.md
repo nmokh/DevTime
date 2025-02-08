@@ -27,6 +27,17 @@ English:
 2. Встановіть залежності
 3. Запустіть програму
 
+## Interactive Mode / Інтерактивний режим
+English: DevTime now supports an interactive mode where you can enter commands in real time.  
+
+Українська: DevTime тепер підтримує інтерактивний режим, де ви можете вводити команди в реальному часі.
+
+### Launching Interactive Mode / Запуск інтерактивного режиму
+Simply run / Просто введіть:
+```bash
+python -m devtime.cli
+```
+
 ## Contributing / Внесок
 English: Contributions are always welcome! Please follow the project guidelines and create a pull request.
 
