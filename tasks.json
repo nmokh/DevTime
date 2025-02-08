@@ -7,17 +7,45 @@
         "id": 1
     },
     {
-        "name": "No deadline task",
+        "name": "Submit project",
+        "duration": 3.0,
+        "deadline": "2025-02-10 18:00",
+        "priority": "high",
+        "id": 3
+    },
+    {
+        "name": "task",
         "duration": 1.5,
         "deadline": null,
         "priority": "medium",
-        "id": 2
+        "id": 4
     },
     {
-        "name": "Write report",
+        "name": "task",
+        "duration": 1.5,
+        "deadline": "2025-02-10 23:59",
+        "priority": "high",
+        "id": 5
+    },
+    {
+        "name": "1",
+        "duration": 1.0,
+        "deadline": "2025-02-08 14:00",
+        "priority": "high",
+        "id": 6
+    },
+    {
+        "name": "fix bug",
+        "duration": 1.5,
+        "deadline": "2025-02-08 20:30",
+        "priority": "low",
+        "id": 7
+    },
+    {
+        "name": "write a report",
         "duration": 1.5,
         "deadline": "2025-02-10 23:59",
         "priority": "medium",
-        "id": null
+        "id": 8
     }
 ]

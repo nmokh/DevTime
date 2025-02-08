@@ -1,4 +1,5 @@
 import argparse
+import shlex
 from tabulate import tabulate
 from datetime import datetime
 from devtime.scheduler import Task, generate_schedule, WorkSchedule
@@ -7,29 +8,69 @@ from devtime.config import load_config, save_config, update_config
 
 def parse_date(date_str):
     """
-    Parses different date formats into a full datetime object.
+    Parses various date formats into a full datetime object.
+    
+    Accepts:
+      - If input is already a datetime object, return it unchanged.
+      - An empty string or "None" (case-insensitive) returns None.
+      - If only time (e.g., "14:00") is provided, uses today's date.
+      - If only a day number is provided (e.g., "10"), assumes current year and month.
+      - If provided in "MM-DD" format (one dash), assumes current year.
+      - Otherwise, uses the provided full date format.
+    
+    Args:
+        date_str (str or datetime): The input date string or datetime object.
+    
+    Returns:
+        datetime or None: The parsed datetime object or None if no deadline.
+    
+    Raises:
+        ValueError: If the date format is invalid.
     """
     from datetime import datetime
-
     now = datetime.now()
 
-    if date_str is None:
-        return None  # No deadline
+    # ✅ Якщо переданий уже об'єкт datetime, просто повертаємо його
+    if isinstance(date_str, datetime):
+        return date_str
 
-    if " " in date_str:
-        date_part, time_part = date_str.split(" ")
+    # ✅ Якщо рядок порожній або "None", повертаємо None
+    if date_str is None or date_str.strip() == "" or date_str.strip().lower() == "none":
+        return None
+
+    date_str = date_str.strip()
+
+    # ✅ Якщо введено тільки час (наприклад, "14:00"), використовуємо поточну дату
+    if ":" in date_str and "-" not in date_str:
+        full_date = now.strftime("%Y-%m-%d")  # Поточний рік-місяць-день
+        time_part = date_str  # Використовуємо введений час
+
+    # ✅ Якщо введена повна дата з часом
+    elif " " in date_str:
+        date_part, time_part = date_str.split(" ", 1)
+        full_date = parse_date_part(date_part, now)  # Використовуємо підфункцію для визначення дати
+
     else:
-        date_part, time_part = date_str, "23:59"  # Default time
+        full_date = parse_date_part(date_str, now)
+        time_part = "23:59"  # Якщо час не вказано, використовуємо 23:59 за замовчуванням
 
-    # Handle different date formats
-    if "-" not in date_part and len(date_part) <= 2:  # "10" → current month
-        full_date = f"{now.year}-{now.month:02d}-{int(date_part):02d}"
-    elif date_part.count("-") == 1:  # "02-10" → current year
-        full_date = f"{now.year}-{date_part}"
-    else:  # Full date format
-        full_date = date_part
+    try:
+        return datetime.strptime(f"{full_date} {time_part}", "%Y-%m-%d %H:%M")
+    except ValueError as e:
+        raise ValueError(f"Invalid date format: '{date_str}'. Expected formats: '10', '02-10', 'YYYY-MM-DD [HH:MM]', or 'HH:MM'. Error: {e}")
 
-    return datetime.strptime(f"{full_date} {time_part}", "%Y-%m-%d %H:%M")
+def parse_date_part(date_part, now):
+    """
+    Parses different formats of the date part.
+    """
+    if "-" not in date_part and len(date_part) <= 2:
+        # Наприклад, "10" → поточний рік і місяць, 10-й день
+        return f"{now.year}-{now.month:02d}-{int(date_part):02d}"
+    elif date_part.count("-") == 1:
+        # Наприклад, "02-10" → поточний рік, 2-й місяць, 10-й день
+        return f"{now.year}-{date_part}"
+    else:
+        return date_part  # Повний формат "YYYY-MM-DD"
 
 def parse_priority(priority_input):
     """
@@ -40,20 +81,24 @@ def parse_priority(priority_input):
 
 def add_task(args):
     """
-    Handles adding a new task with flexible input parsing.
+    Handles adding a new task and saving it to storage.
     """
     tasks = load_tasks()
+    
+    # Автоматично генеруємо унікальний ID для нового завдання
+    task_id = max([task.id for task in tasks], default=0) + 1
 
     name = args.name
     duration = float(args.duration)
-    deadline = parse_date(args.deadline) if args.deadline else None  # Handle missing deadline
-    priority = parse_priority(args.priority) if args.priority else "medium"  # Default to "medium"
+    deadline = parse_date(args.deadline) if args.deadline else None
+    priority = parse_priority(args.priority)
 
-    new_task = Task(name, duration, deadline.strftime("%Y-%m-%d %H:%M") if deadline else None, priority)
+    new_task = Task(task_id, name, duration, deadline, priority)
     tasks.append(new_task)
     save_tasks(tasks)
 
-    print(f"✅ Task added: {new_task}")
+    print(f"✅ Task added: [ID {task_id}] {new_task.name}, {new_task.duration}h, "
+          f"{new_task.deadline.strftime('%Y-%m-%d %H:%M') if new_task.deadline else 'No deadline'}, {new_task.priority}")
 
 def delete_task(args):
     """
@@ -65,15 +110,17 @@ def delete_task(args):
     tasks = load_tasks()
     task_id = args.id
 
-    # Видаляємо завдання з відповідним ID
-    updated_tasks = [task for task in tasks if task.id != task_id]
+    # Пошук завдання за ID
+    task_to_delete = next((task for task in tasks if task.id == task_id), None)
 
-    if len(updated_tasks) == len(tasks):
+    if not task_to_delete:
         print(f"⚠ Task with ID {task_id} not found.")
         return
 
-    save_tasks(updated_tasks)
-    print(f"✅ Task {task_id} deleted successfully.")
+    # Видаляємо завдання
+    tasks.remove(task_to_delete)
+    save_tasks(tasks)
+    print(f"✅ Task {task_id} ({task_to_delete.name}) deleted successfully.")
 
 def edit_task(args):
     """
@@ -219,38 +266,64 @@ def interactive_mode():
             print("  complete   - Mark a task as completed")
             print("  exit       - Exit interactive mode")
             print("-" * 50)
-        elif command == "add":
+        elif command.startswith("add"):
             try:
-                name = input("Task name: ")
-                duration = float(input("Duration (in hours, e.g., 1.5): "))
-                deadline = input("Deadline (YYYY-MM-DD HH:MM): ")
-                priority = input("Priority (low, medium, high): ").lower()
-                if priority not in ["low", "medium", "high"]:
-                    raise ValueError("Invalid priority level.")
+                parts = shlex.split(command)  # Коректний парсер аргументів
+                args = parts[1:]  # Видаляємо "add" і залишаємо тільки параметри
+
+                # Заповнюємо введені параметри
+                name = args[0] if len(args) > 0 else input("Task name: ").strip()
+                duration = args[1] if len(args) > 1 else input("Duration (in hours, e.g., 1.5): ").strip()
+                deadline = args[2] if len(args) > 2 else input("Deadline (YYYY-MM-DD HH:MM, leave empty for none): ").strip()
+                priority = args[3] if len(args) > 3 else input("Priority (1=high, 2=medium, 3=low, leave empty for medium): ").strip()
+
+                # Перетворюємо значення у правильний формат
+                duration = float(duration)
+                deadline = parse_date(deadline) if deadline else None
+                priority_map = {"1": "high", "2": "medium", "3": "low", "high": "high", "medium": "medium", "low": "low"}
+                priority = priority_map.get(priority, "medium")  # Якщо користувач нічого не ввів, використовуємо "medium"
+
+                # Викликаємо функцію додавання завдання
                 add_task(argparse.Namespace(name=name, duration=duration, deadline=deadline, priority=priority))
+
             except ValueError as e:
                 print(f"⚠ Error: {e}")
         elif command == "edit":
-            task_id = int(input("Task ID: "))
-            name = input("New name (leave empty to keep current): ")
-            duration = input("New duration (leave empty to keep current): ")
-            deadline = input("New deadline (YYYY-MM-DD HH:MM, leave empty to keep current): ")
-            priority = input("New priority (low, medium, high, leave empty to keep current): ")
+            task_id = int(input("Task ID: ").strip())
+            name = input("New name (leave empty to keep current): ").strip()
+            duration = input("New duration (leave empty to keep current): ").strip()
+            deadline = input("New deadline (YYYY-MM-DD HH:MM, leave empty to keep current): ").strip()
+            priority = input("New priority (1=high, 2=medium, 3=low, leave empty to keep current): ").strip().lower()
+
+            # Конвертація пріоритету
+            priority_map = {"1": "high", "2": "medium", "3": "low", "high": "high", "medium": "medium", "low": "low"}
+            priority = priority_map.get(priority, None)  # Якщо нічого не введено, не змінюємо пріоритет
 
             edit_task(argparse.Namespace(
                 id=task_id,
                 name=name or None,
                 duration=float(duration) if duration else None,
                 deadline=deadline or None,
-                priority=priority or None
+                priority=priority
             ))
 
-        elif command == "delete":
-            task_id = int(input("Task ID: "))
-            delete_task(argparse.Namespace(id=task_id))
-
+        elif command.startswith("delete"):
+            parts = command.split()
+            
+            if len(parts) > 1:
+                try:
+                    task_id = int(parts[1])
+                    delete_task(argparse.Namespace(id=task_id))
+                except ValueError:
+                    print("⚠ Invalid task ID. Please enter a number.")
+            else:
+                try:
+                    task_id = int(input("Task ID: ").strip())
+                    delete_task(argparse.Namespace(id=task_id))
+                except ValueError:
+                    print("⚠ Invalid task ID. Please enter a number.")
         elif command == "complete":
-            task_id = int(input("Task ID: "))
+            task_id = int(input("Task ID: ").strip())
             complete_task(argparse.Namespace(id=task_id))
         elif command == "plan":
             plan_schedule(None)
