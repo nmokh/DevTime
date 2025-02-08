@@ -3,6 +3,7 @@ from tabulate import tabulate
 from datetime import datetime
 from devtime.scheduler import Task, generate_schedule, WorkSchedule
 from devtime.storage import save_tasks, load_tasks, save_schedule, load_schedules, load_completed_tasks, save_completed_tasks
+from devtime.config import load_config, save_config, update_config
 
 def add_task(args):
     """
@@ -228,6 +229,35 @@ def interactive_mode():
         else:
             print("⚠ Invalid command. Type 'help' to see available commands.")
 
+def view_config(args):
+    """Displays the current user configuration."""
+    config = load_config()
+    print("\n🔧 User Configuration:")
+    for key, value in config.items():
+        print(f"{key}: {value}")
+
+def update_work_hours(args):
+    """Updates working hours for a specific day."""
+    config = load_config()
+    
+    if args.start.lower() == "none":
+        config["work_hours"][args.day] = {"start": None, "end": None}
+    else:
+        config["work_hours"][args.day] = {"start": int(args.start), "end": int(args.end)}
+    
+    save_config(config)
+    print(f"✅ Updated working hours for {args.day}.")
+
+def update_concentration(args):
+    """Updates max concentration hours."""
+    update_config("max_concentration_hours", float(args.hours))
+    print(f"✅ Updated max concentration hours to {args.hours}h.")
+
+def update_break(args):
+    """Updates minimum break time."""
+    update_config("min_break_minutes", int(args.minutes))
+    print(f"✅ Updated minimum break to {args.minutes} minutes.")
+
 def main():
     """
     Sets up the CLI interface using argparse and executes the corresponding command.
@@ -285,6 +315,27 @@ def main():
     # "schedule" command: View last saved schedule
     schedule_parser = subparsers.add_parser("schedule", help="View last saved schedule")
     schedule_parser.set_defaults(func=view_schedule)
+
+    # "config" command: View or change user settings
+    config_parser = subparsers.add_parser("config", help="View or change user settings")
+    config_parser.set_defaults(func=view_config)
+
+    # Subparsers for configuration commands
+    work_hours_parser = subparsers.add_parser("config-hours", help="Update working hours")
+    work_hours_parser.add_argument("day", type=str, help="Day of the week")
+    work_hours_parser.add_argument("start", type=str, help="Start time (or 'none' to set as a day off)")
+    work_hours_parser.add_argument("end", type=str, help="End time (ignored if 'none')")
+    work_hours_parser.set_defaults(func=update_work_hours)
+
+    # Subparsers for updating concentration and break time
+    concentration_parser = subparsers.add_parser("config-focus", help="Update concentration time")
+    concentration_parser.add_argument("hours", type=float, help="Max concentration hours")
+    concentration_parser.set_defaults(func=update_concentration)
+
+    # "config-break" command: Update minimum break time
+    break_parser = subparsers.add_parser("config-break", help="Update break time")
+    break_parser.add_argument("minutes", type=int, help="Minimum break time in minutes")
+    break_parser.set_defaults(func=update_break)
 
     args = parser.parse_args()
     args.func(args)

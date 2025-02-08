@@ -1,4 +1,5 @@
 from datetime import datetime
+from devtime.config import load_config
 
 class Task:
     """
@@ -43,7 +44,7 @@ class WorkSchedule:
     Represents the work schedule with defined working hours, work block duration,
     break time between blocks, and maximum daily working hours.
     """
-    def __init__(self, start_hour=9, end_hour=18, work_block=90, break_time=15, max_daily_hours=8):
+    def __init__(self, day_of_week):
         """
         Initialize a WorkSchedule instance.
 
@@ -54,11 +55,17 @@ class WorkSchedule:
             break_time (int): Duration of break between work blocks in minutes.
             max_daily_hours (int): Maximum working hours allowed per day.
         """
-        self.start_hour = start_hour
-        self.end_hour = end_hour
-        self.work_block = work_block
-        self.break_time = break_time
-        self.max_daily_hours = max_daily_hours
+        config = load_config()
+        work_hours = config["work_hours"].get(day_of_week, {"start": None, "end": None})
+
+        if work_hours["start"] is None or work_hours["end"] is None:
+            self.is_day_off = True
+        else:
+            self.is_day_off = False
+            self.start_hour = work_hours["start"]
+            self.end_hour = work_hours["end"]
+            self.max_concentration_hours = config["max_concentration_hours"]
+            self.min_break_minutes = config["min_break_minutes"]
 
     def get_available_hours(self):
         """
