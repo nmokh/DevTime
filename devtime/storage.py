@@ -50,24 +50,24 @@ def dict_to_task(data):
     Returns:
         Task: The corresponding Task object.
     """
-    deadline_str = data["deadline"]
+    deadline_str = data.get("deadline")  # Використовуємо .get(), щоб уникнути KeyError
 
-    # If the deadline is already a datetime object, format it as a string
-    if isinstance(deadline_str, datetime):
-        return Task(data["name"], data["duration"], deadline_str.strftime("%Y-%m-%d %H:%M"), data["priority"])
-
-    # Convert the ISO formatted string to a datetime object
-    try:
-        # Replace 'T' with a space if present
-        deadline_str = deadline_str.replace("T", " ")
-        deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
+    if deadline_str is None:  
+        deadline_dt = None  # Якщо дедлайн відсутній, залишаємо None
+    elif isinstance(deadline_str, datetime):  
+        deadline_dt = deadline_str  # Якщо це вже datetime, залишаємо як є
+    else:
+        # Конвертуємо ISO-формат у datetime
+        try:
+            deadline_str = deadline_str.replace("T", " ")  # Convert "2025-02-07T10:00" -> "2025-02-07 10:00"
+            deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M:%S")  # Handle seconds
+        except ValueError:
+            deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")  # Fallback for no seconds
 
     return Task(
         name=data["name"],
         duration=data["duration"],
-        deadline=datetime.strptime(data["deadline"], "%Y-%m-%d %H:%M") if isinstance(data["deadline"], str) else data["deadline"],
+        deadline=deadline_dt.strftime("%Y-%m-%d %H:%M") if deadline_dt else None,  # Записуємо None у Task, якщо дедлайн відсутній
         priority=data["priority"],
         task_id=data.get("id")  # Extract ID if present
     )

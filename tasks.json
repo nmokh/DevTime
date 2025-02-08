@@ -4,6 +4,20 @@
         "duration": 2.0,
         "deadline": null,
         "priority": "medium",
+        "id": 1
+    },
+    {
+        "name": "No deadline task",
+        "duration": 1.5,
+        "deadline": null,
+        "priority": "medium",
+        "id": 2
+    },
+    {
+        "name": "Write report",
+        "duration": 1.5,
+        "deadline": "2025-02-10 23:59",
+        "priority": "medium",
         "id": null
     }
 ]
