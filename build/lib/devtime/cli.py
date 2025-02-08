@@ -5,23 +5,55 @@ from devtime.scheduler import Task, generate_schedule, WorkSchedule
 from devtime.storage import save_tasks, load_tasks, save_schedule, load_schedules, load_completed_tasks, save_completed_tasks
 from devtime.config import load_config, save_config, update_config
 
+def parse_date(date_str):
+    """
+    Parses different date formats into a full datetime object.
+    """
+    from datetime import datetime
+
+    now = datetime.now()
+
+    if date_str is None:
+        return None  # No deadline
+
+    if " " in date_str:
+        date_part, time_part = date_str.split(" ")
+    else:
+        date_part, time_part = date_str, "23:59"  # Default time
+
+    # Handle different date formats
+    if "-" not in date_part and len(date_part) <= 2:  # "10" → current month
+        full_date = f"{now.year}-{now.month:02d}-{int(date_part):02d}"
+    elif date_part.count("-") == 1:  # "02-10" → current year
+        full_date = f"{now.year}-{date_part}"
+    else:  # Full date format
+        full_date = date_part
+
+    return datetime.strptime(f"{full_date} {time_part}", "%Y-%m-%d %H:%M")
+
+def parse_priority(priority_input):
+    """
+    Parses priority input (either number or text). Defaults to 'medium' (2) if not specified.
+    """
+    priority_map = {"1": "high", "2": "medium", "3": "low", "high": "high", "medium": "medium", "low": "low"}
+    return priority_map.get(str(priority_input).lower(), "medium")  # Default to 'medium'
+
 def add_task(args):
     """
-    Adds a new task and saves it to storage.
-
-    Args:
-        args: Command line arguments containing task details.
+    Handles adding a new task with flexible input parsing.
     """
-    try:
-        # Validate and parse the deadline format
-        deadline = datetime.strptime(args.deadline, "%Y-%m-%d %H:%M")
-        tasks = load_tasks()
-        new_task = Task(args.name, args.duration, deadline.strftime("%Y-%m-%d %H:%M"), args.priority)
-        tasks.append(new_task)
-        save_tasks(tasks)
-        print(f"Task added successfully: {new_task}")
-    except ValueError:
-        print("Error: Invalid date format. Use YYYY-MM-DD HH:MM.")
+    tasks = load_tasks()
+
+    name = args.name
+    duration = float(args.duration)
+    deadline = parse_date(args.deadline) if args.deadline else None  # Handle missing deadline
+    priority = parse_priority(args.priority) if args.priority else "medium"  # Default to "medium"
+
+    new_task = Task(name, duration, deadline.strftime("%Y-%m-%d %H:%M") if deadline else None, priority)
+    tasks.append(new_task)
+    save_tasks(tasks)
+
+    print(f"✅ Task added: {new_task}")
 
 def delete_task(args):
     """
@@ -278,11 +310,11 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # "add" command: Add a new task
-    add_parser = subparsers.add_parser("add", help="Add a new task")
-    add_parser.add_argument("name", type=str, help="Task name")
-    add_parser.add_argument("--duration", type=float, required=True, help="Task duration in hours")
-    add_parser.add_argument("--deadline", type=str, required=True, help="Task deadline (YYYY-MM-DD HH:MM)")
-    add_parser.add_argument("--priority", type=str, choices=["low", "medium", "high"], default="medium", help="Task priority")
+    add_parser = subparsers.add_parser("add", help="Add a new task with flexible input")
+    add_parser.add_argument("name", type=str, help="Task name (use quotes for multiple words)")
+    add_parser.add_argument("duration", type=float, help="Task duration in hours")
+    add_parser.add_argument("deadline", type=str, nargs="?", default=None, help="Deadline (e.g. '10', '02-10', '2025-02-10 18:00')")
+    add_parser.add_argument("priority", type=str, nargs="?", default="2", help="Priority (1=high, 2=medium, 3=low or 'high')")
     add_parser.set_defaults(func=add_task)
 
     # "delete" command: Delete a task
@@ -293,10 +325,10 @@ def main():
     # "edit" command: Edit an existing task
     edit_parser = subparsers.add_parser("edit", help="Edit a task")
     edit_parser.add_argument("id", type=int, help="Task ID")
-    edit_parser.add_argument("--name", type=str, help="New task name")
-    edit_parser.add_argument("--duration", type=float, help="New task duration in hours")
-    edit_parser.add_argument("--deadline", type=str, help="New deadline (YYYY-MM-DD HH:MM)")
-    edit_parser.add_argument("--priority", type=str, choices=["low", "medium", "high"], help="New task priority")
+    edit_parser.add_argument("--name", type=str, help="New task name", required=False)
+    edit_parser.add_argument("--duration", type=float, help="New task duration in hours", required=False)
+    edit_parser.add_argument("--deadline", type=str, help="New deadline (YYYY-MM-DD HH:MM)", required=False)
+    edit_parser.add_argument("--priority", type=str, choices=["low", "medium", "high"], help="New task priority", required=False)
     edit_parser.set_defaults(func=edit_task)
 
     # "complete" command: Mark a task as completed

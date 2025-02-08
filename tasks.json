@@ -1,1 +1,9 @@
-[]
+[
+    {
+        "name": "Fix bug",
+        "duration": 2.0,
+        "deadline": null,
+        "priority": "medium",
+        "id": null
+    }
+]
