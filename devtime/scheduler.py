@@ -2,9 +2,8 @@ from datetime import datetime
 from devtime.config import load_config
 
 class Task:
-    """
-    Represents a task with a name, duration, deadline, and priority.
-    """
+    """Represents a task with a name, duration, deadline, and priority."""
+    
     PRIORITIES = {"low", "medium", "high"}
 
     def __init__(self, name: str, duration: float, deadline: str, priority: str = "medium", task_id: int = None):
@@ -16,44 +15,32 @@ class Task:
             duration (float): The duration of the task in hours.
             deadline (str): The deadline for the task in "YYYY-MM-DD HH:MM" format.
             priority (str): The priority level ("low", "medium", or "high").
-
+            task_id (int, optional): The ID of the task.
+        
         Raises:
             ValueError: If the provided priority is not valid.
         """
         if priority not in self.PRIORITIES:
             raise ValueError(f"Invalid priority: {priority}. Choose from {self.PRIORITIES}")
         
-        self.id = task_id  # Assign task ID
-
+        self.id = task_id if task_id is not None else generate_task_id()
         self.name = name
         self.duration = duration
-        
-        # Convert deadline string to a datetime object if necessary
-        if isinstance(deadline, str):
-            self.deadline = datetime.strptime(deadline, "%Y-%m-%d %H:%M")
-        else:
-            self.deadline = deadline
-
+        self.deadline = datetime.strptime(deadline, "%Y-%m-%d %H:%M") if isinstance(deadline, str) else deadline
         self.priority = priority
 
     def __repr__(self):
         return f"Task({self.name}, {self.duration}h, {self.deadline}, {self.priority})"
 
 class WorkSchedule:
-    """
-    Represents the work schedule with defined working hours, work block duration,
-    break time between blocks, and maximum daily working hours.
-    """
+    """Represents the work schedule with defined working hours and breaks."""
+    
     def __init__(self, day_of_week):
         """
         Initialize a WorkSchedule instance.
 
         Args:
-            start_hour (int): Start of the workday (24-hour format).
-            end_hour (int): End of the workday (24-hour format).
-            work_block (int): Duration of one work block in minutes.
-            break_time (int): Duration of break between work blocks in minutes.
-            max_daily_hours (int): Maximum working hours allowed per day.
+            day_of_week (str): The day of the week.
         """
         config = load_config()
         work_hours = config["work_hours"].get(day_of_week, {"start": None, "end": None})
@@ -74,9 +61,9 @@ class WorkSchedule:
         Returns:
             float: The available working hours.
         """
-        total_time = (self.end_hour - self.start_hour) * 60  # Total minutes available
+        total_time = (self.end_hour - self.start_hour) * 60
         work_blocks = total_time // (self.work_block + self.break_time)
-        available_hours = work_blocks * (self.work_block / 60)  # Convert minutes to hours
+        available_hours = work_blocks * (self.work_block / 60)
         return min(available_hours, self.max_daily_hours)
 
     def __repr__(self):
@@ -86,11 +73,7 @@ class WorkSchedule:
 
 def generate_schedule(tasks, schedule):
     """
-    Generates an optimal work schedule for the day.
-
-    Filters out tasks with deadlines in the past, sorts tasks by deadline and priority,
-    and assigns tasks until the available working hours are exhausted. Tasks that do not fit
-    are postponed.
+    Generate an optimal work schedule for the day.
 
     Args:
         tasks (list[Task]): The list of tasks.
@@ -101,14 +84,10 @@ def generate_schedule(tasks, schedule):
             - schedule_plan (list[Task]): Tasks scheduled for today.
             - remaining_tasks (list[Task]): Tasks that could not be scheduled.
     """
-    # Filter out tasks whose deadlines have passed
     now = datetime.now()
     tasks = [task for task in tasks if task.deadline >= now]
 
-    # Priority mapping: lower number means higher priority
     priority_map = {"low": 3, "medium": 2, "high": 1}
-
-    # Sort tasks by deadline and then by priority
     tasks.sort(key=lambda t: (t.deadline, priority_map[t.priority]))
 
     available_hours = schedule.get_available_hours()

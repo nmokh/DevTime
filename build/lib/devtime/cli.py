@@ -2,57 +2,56 @@ import argparse
 import shlex
 from tabulate import tabulate
 from datetime import datetime
+
 from devtime.scheduler import Task, generate_schedule, WorkSchedule
-from devtime.storage import save_tasks, load_tasks, save_schedule, load_schedules, load_completed_tasks, save_completed_tasks
+from devtime.storage import (
+    generate_task_id, save_tasks, load_tasks, save_schedule, load_schedules, 
+    load_completed_tasks, save_completed_tasks
+)
 from devtime.config import load_config, save_config, update_config
 
 def parse_date(date_str):
     """
     Parses various date formats into a full datetime object.
-    
-    Accepts:
-      - If input is already a datetime object, return it unchanged.
-      - An empty string or "None" (case-insensitive) returns None.
-      - If only time (e.g., "14:00") is provided, uses today's date.
-      - If only a day number is provided (e.g., "10"), assumes current year and month.
-      - If provided in "MM-DD" format (one dash), assumes current year.
-      - Otherwise, uses the provided full date format.
-    
+
     Args:
         date_str (str or datetime): The input date string or datetime object.
-    
+
     Returns:
         datetime or None: The parsed datetime object or None if no deadline.
-    
+
     Raises:
         ValueError: If the date format is invalid.
     """
-    from datetime import datetime
     now = datetime.now()
 
-    # ✅ Якщо переданий уже об'єкт datetime, просто повертаємо його
     if isinstance(date_str, datetime):
         return date_str
 
-    # ✅ Якщо рядок порожній або "None", повертаємо None
     if date_str is None or date_str.strip() == "" or date_str.strip().lower() == "none":
         return None
 
     date_str = date_str.strip()
 
-    # ✅ Якщо введено тільки час (наприклад, "14:00"), використовуємо поточну дату
-    if ":" in date_str and "-" not in date_str:
-        full_date = now.strftime("%Y-%m-%d")  # Поточний рік-місяць-день
-        time_part = date_str  # Використовуємо введений час
+    if date_str.isdigit():
+        full_date = f"{now.year}-{now.month:02d}-{int(date_str):02d}"
+        time_part = "23:59" 
 
-    # ✅ Якщо введена повна дата з часом
-    elif " " in date_str:
-        date_part, time_part = date_str.split(" ", 1)
-        full_date = parse_date_part(date_part, now)  # Використовуємо підфункцію для визначення дати
+    elif ":" in date_str and "-" not in date_str and " " not in date_str:
+        full_date = now.strftime("%Y-%m-%d")
+        time_part = date_str
+
+    elif " " in date_str and date_str.split(" ")[0].isdigit():
+        day_part, time_part = date_str.split(" ", 1)
+        full_date = f"{now.year}-{now.month:02d}-{int(day_part):02d}"
+
+    elif "-" in date_str:
+        parts = date_str.split(" ")
+        full_date = parse_date_part(parts[0], now)
+        time_part = parts[1] if len(parts) > 1 else "23:59"
 
     else:
-        full_date = parse_date_part(date_str, now)
-        time_part = "23:59"  # Якщо час не вказано, використовуємо 23:59 за замовчуванням
+        raise ValueError(f"Invalid date format: '{date_str}'. Expected formats: '10', '02-10', 'YYYY-MM-DD [HH:MM]', or 'HH:MM'.")
 
     try:
         return datetime.strptime(f"{full_date} {time_part}", "%Y-%m-%d %H:%M")
@@ -62,38 +61,81 @@ def parse_date(date_str):
 def parse_date_part(date_part, now):
     """
     Parses different formats of the date part.
+
+    Args:
+        date_part (str): The date part of the input string.
+        now (datetime): The current datetime.
+
+    Returns:
+        str: The parsed date part in 'YYYY-MM-DD' format.
     """
-    if "-" not in date_part and len(date_part) <= 2:
-        # Наприклад, "10" → поточний рік і місяць, 10-й день
-        return f"{now.year}-{now.month:02d}-{int(date_part):02d}"
+    if "-" not in date_part:  
+        if len(date_part) <= 2:  
+            return f"{now.year}-{now.month:02d}-{int(date_part):02d}"
+        else:
+            raise ValueError(f"Invalid date format: '{date_part}'. Expected 'MM-DD' or 'YYYY-MM-DD'.")
+    
     elif date_part.count("-") == 1:
-        # Наприклад, "02-10" → поточний рік, 2-й місяць, 10-й день
         return f"{now.year}-{date_part}"
-    else:
-        return date_part  # Повний формат "YYYY-MM-DD"
+    
+    return date_part
 
 def parse_priority(priority_input):
     """
-    Parses priority input (either number or text). Defaults to 'medium' (2) if not specified.
+    Parses priority input (either number or text).
+
+    Args:
+        priority_input (str or int): The priority input.
+
+    Returns:
+        str: The parsed priority ('high', 'medium', or 'low').
     """
     priority_map = {"1": "high", "2": "medium", "3": "low", "high": "high", "medium": "medium", "low": "low"}
-    return priority_map.get(str(priority_input).lower(), "medium")  # Default to 'medium'
+    return priority_map.get(str(priority_input).lower(), "medium")
+
+def parse_add_args(args):
+    """
+    Parses and corrects the format of the add command arguments.
+
+    Args:
+        args (list[str]): List of arguments passed in the command.
+
+    Returns:
+        dict: Corrected arguments.
+    """
+    name = args[0]
+    duration = args[1]
+    deadline = None
+    priority = "2"  # Default value (medium)
+
+    if len(args) > 2:
+        if len(args) > 3 and ":" in args[3]: 
+            deadline = f"{args[2]} {args[3]}"
+            priority = args[4] if len(args) > 4 else priority
+        else: 
+            deadline = args[2]
+            priority = args[3] if len(args) > 3 else priority
+
+    return argparse.Namespace(
+        name=name,
+        duration=duration,
+        deadline=deadline,
+        priority=priority
+    )
 
 def add_task(args):
     """
     Handles adding a new task and saving it to storage.
     """
     tasks = load_tasks()
-    
-    # Автоматично генеруємо унікальний ID для нового завдання
-    task_id = max([task.id for task in tasks], default=0) + 1
+    task_id = generate_task_id()
 
     name = args.name
     duration = float(args.duration)
     deadline = parse_date(args.deadline) if args.deadline else None
     priority = parse_priority(args.priority)
 
-    new_task = Task(task_id, name, duration, deadline, priority)
+    new_task = Task(name, duration, deadline, priority, task_id)
     tasks.append(new_task)
     save_tasks(tasks)
 
@@ -102,25 +144,47 @@ def add_task(args):
 
 def delete_task(args):
     """
-    Deletes a task by its ID.
+    Deletes tasks by their IDs from active or completed lists. Supports "all" to delete all completed tasks.
 
     Args:
-        args (Namespace): Command-line arguments containing the task ID.
+        args (Namespace): Command-line arguments containing task IDs and optional --completed flag.
     """
     tasks = load_tasks()
-    task_id = args.id
+    completed_tasks = load_completed_tasks()
 
-    # Пошук завдання за ID
-    task_to_delete = next((task for task in tasks if task.id == task_id), None)
+    # Convert IDs to integers (if not "all")
+    active_ids = list(map(int, args.active_ids)) if args.active_ids else []
+    completed_ids = [] if args.completed_ids is None else args.completed_ids
 
-    if not task_to_delete:
-        print(f"⚠ Task with ID {task_id} not found.")
+    # Delete from active tasks
+    if active_ids:
+        initial_count = len(tasks)
+        tasks = [task for task in tasks if task.id not in active_ids]
+        if len(tasks) < initial_count:
+            save_tasks(tasks)
+            print(f"✅ Deleted active tasks: {', '.join(map(str, active_ids))}.")
+        else:
+            print(f"⚠ No matching active tasks found for IDs: {', '.join(map(str, active_ids))}.")
+
+    # Delete from completed tasks
+    if "all" in completed_ids:
+        confirm = input("⚠ Are you sure you want to delete all completed tasks? (yes/no): ").strip().lower()
+        if confirm == "yes" or confirm == "y":
+            save_completed_tasks([])
+            print("✅ All completed tasks have been deleted.")
+        else:
+            print("🚫 Operation canceled.")
         return
 
-    # Видаляємо завдання
-    tasks.remove(task_to_delete)
-    save_tasks(tasks)
-    print(f"✅ Task {task_id} ({task_to_delete.name}) deleted successfully.")
+    if completed_ids:
+        completed_ids = list(map(int, completed_ids))
+        initial_count = len(completed_tasks)
+        completed_tasks = [task for task in completed_tasks if task.id not in completed_ids]
+        if len(completed_tasks) < initial_count:
+            save_completed_tasks(completed_tasks)
+            print(f"✅ Deleted completed tasks: {', '.join(map(str, completed_ids))}.")
+        else:
+            print(f"⚠ No matching completed tasks found for IDs: {', '.join(map(str, completed_ids))}.")
 
 def edit_task(args):
     """
@@ -151,25 +215,36 @@ def edit_task(args):
 
 def complete_task(args):
     """
-    Marks a task as completed.
+    Marks one or multiple tasks as completed. Supports "all" to complete all tasks.
 
     Args:
-        args (Namespace): Command-line arguments containing task ID.
+        args (Namespace): Command-line arguments containing task IDs or "all".
     """
     tasks = load_tasks()
-    completed_tasks = load_completed_tasks()  # Завантажуємо виконані завдання
-    task_id = args.id
+    completed_tasks = load_completed_tasks()
 
-    for task in tasks:
-        if task.id == task_id:
-            completed_tasks.append(task)  # Додаємо виконане завдання до списку
-            tasks.remove(task)  # Видаляємо його зі списку активних завдань
-            save_tasks(tasks)  # Оновлюємо tasks.json
-            save_completed_tasks(completed_tasks)  # Зберігаємо виконані завдання
-            print(f"✅ Task {task_id} marked as completed.")
-            return
+    if "all" in args.ids:
+        confirm = input("⚠ Are you sure you want to mark all tasks as completed? (yes/no): ").strip().lower()
+        if confirm == "yes" or "y":
+            completed_tasks.extend(tasks)
+            save_completed_tasks(completed_tasks)
+            save_tasks([])
+            print("✅ All tasks have been marked as completed.")
+        else:
+            print("🚫 Operation canceled.")
+        return
 
-    print(f"⚠ Task with ID {task_id} not found.")
+    initial_count = len(tasks)
+    remaining_tasks = [task for task in tasks if task.id not in map(int, args.ids)]
+    completed_now = [task for task in tasks if task.id in map(int, args.ids)]
+
+    if not completed_now:
+        print(f"⚠ No matching tasks found for IDs: {', '.join(args.ids)}.")
+    else:
+        completed_tasks.extend(completed_now)
+        save_completed_tasks(completed_tasks)
+        save_tasks(remaining_tasks)
+        print(f"✅ Successfully marked tasks as completed: {', '.join(args.ids)}.")
 
 def plan_schedule(args):
     """
@@ -180,7 +255,8 @@ def plan_schedule(args):
         args: Command line arguments.
     """
     tasks = load_tasks()
-    schedule = WorkSchedule()
+    today = datetime.today().strftime("%A")
+    schedule = WorkSchedule(today)
     planned_tasks, remaining_tasks = generate_schedule(tasks, schedule)
 
     # Save the generated schedule with the current date
@@ -235,7 +311,6 @@ def view_schedule(args):
     # Display the most recent schedule
     last_schedule = schedules[-1]
     print(f"\n📅 Schedule for {last_schedule['date']}:")
-    # Assume the ISO datetime contains a 'T' separator and extract the time part.
     table = [
         [task["name"], f"{task['duration']}h", task["deadline"].split("T")[1]] 
         for task in last_schedule["tasks"]
@@ -268,22 +343,19 @@ def interactive_mode():
             print("-" * 50)
         elif command.startswith("add"):
             try:
-                parts = shlex.split(command)  # Коректний парсер аргументів
-                args = parts[1:]  # Видаляємо "add" і залишаємо тільки параметри
+                parts = shlex.split(command)
+                args = parts[1:]
 
-                # Заповнюємо введені параметри
                 name = args[0] if len(args) > 0 else input("Task name: ").strip()
                 duration = args[1] if len(args) > 1 else input("Duration (in hours, e.g., 1.5): ").strip()
                 deadline = args[2] if len(args) > 2 else input("Deadline (YYYY-MM-DD HH:MM, leave empty for none): ").strip()
                 priority = args[3] if len(args) > 3 else input("Priority (1=high, 2=medium, 3=low, leave empty for medium): ").strip()
 
-                # Перетворюємо значення у правильний формат
                 duration = float(duration)
                 deadline = parse_date(deadline) if deadline else None
                 priority_map = {"1": "high", "2": "medium", "3": "low", "high": "high", "medium": "medium", "low": "low"}
-                priority = priority_map.get(priority, "medium")  # Якщо користувач нічого не ввів, використовуємо "medium"
+                priority = priority_map.get(priority, "medium")
 
-                # Викликаємо функцію додавання завдання
                 add_task(argparse.Namespace(name=name, duration=duration, deadline=deadline, priority=priority))
 
             except ValueError as e:
@@ -295,9 +367,8 @@ def interactive_mode():
             deadline = input("New deadline (YYYY-MM-DD HH:MM, leave empty to keep current): ").strip()
             priority = input("New priority (1=high, 2=medium, 3=low, leave empty to keep current): ").strip().lower()
 
-            # Конвертація пріоритету
             priority_map = {"1": "high", "2": "medium", "3": "low", "high": "high", "medium": "medium", "low": "low"}
-            priority = priority_map.get(priority, None)  # Якщо нічого не введено, не змінюємо пріоритет
+            priority = priority_map.get(priority, None)
 
             edit_task(argparse.Namespace(
                 id=task_id,
@@ -379,20 +450,20 @@ def main():
         description="Intelligent CLI-based task scheduler for developers."
     )
 
-    # Create subparsers for different commands
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # "add" command: Add a new task
     add_parser = subparsers.add_parser("add", help="Add a new task with flexible input")
     add_parser.add_argument("name", type=str, help="Task name (use quotes for multiple words)")
     add_parser.add_argument("duration", type=float, help="Task duration in hours")
-    add_parser.add_argument("deadline", type=str, nargs="?", default=None, help="Deadline (e.g. '10', '02-10', '2025-02-10 18:00')")
+    add_parser.add_argument("deadline", type=str, nargs="*", default=None, help="Deadline (e.g. '10', '02-10', '2025-02-10 18:00')")
     add_parser.add_argument("priority", type=str, nargs="?", default="2", help="Priority (1=high, 2=medium, 3=low or 'high')")
     add_parser.set_defaults(func=add_task)
 
     # "delete" command: Delete a task
-    delete_parser = subparsers.add_parser("delete", help="Delete a task")
-    delete_parser.add_argument("id", type=int, help="Task ID")
+    delete_parser = subparsers.add_parser("delete", help="Delete tasks from active or completed lists.")
+    delete_parser.add_argument("active_ids", nargs="*", help="Task IDs to delete from active tasks.")
+    delete_parser.add_argument("--completed", nargs="*", dest="completed_ids", help="Task IDs to delete from completed tasks.")
     delete_parser.set_defaults(func=delete_task)
 
     # "edit" command: Edit an existing task
@@ -405,8 +476,8 @@ def main():
     edit_parser.set_defaults(func=edit_task)
 
     # "complete" command: Mark a task as completed
-    complete_parser = subparsers.add_parser("complete", help="Mark a task as completed")
-    complete_parser.add_argument("id", type=int, help="Task ID")
+    complete_parser = subparsers.add_parser("complete", help="Mark tasks as completed.")
+    complete_parser.add_argument("ids", nargs="+", help="Task IDs to mark as completed or 'all' to complete all tasks.")
     complete_parser.set_defaults(func=complete_task)
 
     # "plan" command: Generate an optimized schedule
@@ -443,6 +514,45 @@ def main():
     break_parser.set_defaults(func=update_break)
 
     args = parser.parse_args()
+
+    if args.command == "add":
+
+        deadline = None
+        priority = args.priority 
+
+        if isinstance(args.deadline, list):
+            args.deadline = [d.strip() for d in args.deadline if d.strip()] 
+
+        if args.deadline:
+            if len(args.deadline) == 1: 
+                deadline = args.deadline[0]
+            elif len(args.deadline) == 2 and " " not in args.deadline[0]:
+                if ":" in args.deadline[1]:
+                    deadline = f"{args.deadline[0]} {args.deadline[1]}"
+                else:
+                    deadline = f"{args.deadline[0]}"
+                    priority = args.deadline[1]
+            elif len(args.deadline) == 2 and " " in args.deadline[0]: 
+                deadline = f"{args.deadline[0]}"
+                priority = args.deadline[1]
+            elif len(args.deadline) > 2:  
+                deadline = f"{args.deadline[0]} {args.deadline[1]}"
+                priority = args.deadline[2] 
+
+        if not deadline:
+            deadline = None
+
+        valid_priorities = {"1": "high", "2": "medium", "3": "low"}
+        priority = valid_priorities.get(priority, "medium")
+
+        args = argparse.Namespace(
+            name=args.name,
+            duration=args.duration,
+            deadline=deadline,
+            priority=priority,
+            func=add_task
+        )
+
     args.func(args)
 
 if __name__ == "__main__":

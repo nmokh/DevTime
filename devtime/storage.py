@@ -2,13 +2,13 @@ import json
 from datetime import datetime
 from devtime.scheduler import Task
 
-TASKS_FILE = "tasks.json"         # File to store tasks
-SCHEDULES_FILE = "schedules.json"   # File to store schedule history
+TASKS_FILE = "tasks.json"  # File to store tasks
+SCHEDULES_FILE = "schedules.json"  # File to store schedule history
 COMPLETED_TASKS_FILE = "completed_tasks.json"  # File to store completed tasks
 
 def task_to_dict(task):
     """
-    Convert a Task object to a dictionary with the deadline in ISO format.
+    Converts a Task object to a dictionary with the deadline in ISO format.
 
     Args:
         task (Task): The task to convert.
@@ -21,12 +21,12 @@ def task_to_dict(task):
         "duration": task.duration,
         "deadline": task.deadline.strftime("%Y-%m-%d %H:%M") if isinstance(task.deadline, datetime) else task.deadline,
         "priority": task.priority,
-        "id": task.id  # Include task ID in the dictionary
+        "id": task.id
     }
 
 def schedule_to_dict(schedule_date, tasks):
     """
-    Convert a schedule to a dictionary for JSON storage.
+    Converts a schedule to a dictionary for JSON storage.
 
     Args:
         schedule_date (datetime): The date of the schedule.
@@ -42,7 +42,7 @@ def schedule_to_dict(schedule_date, tasks):
 
 def dict_to_task(data):
     """
-    Convert a dictionary to a Task object, parsing the deadline from an ISO string.
+    Converts a dictionary to a Task object, parsing the deadline from an ISO string.
 
     Args:
         data (dict): Dictionary representation of a task.
@@ -50,31 +50,30 @@ def dict_to_task(data):
     Returns:
         Task: The corresponding Task object.
     """
-    deadline_str = data.get("deadline")  # Використовуємо .get(), щоб уникнути KeyError
+    deadline_str = data.get("deadline")
 
-    if deadline_str is None:  
-        deadline_dt = None  # Якщо дедлайн відсутній, залишаємо None
-    elif isinstance(deadline_str, datetime):  
-        deadline_dt = deadline_str  # Якщо це вже datetime, залишаємо як є
+    if deadline_str is None:
+        deadline_dt = None
+    elif isinstance(deadline_str, datetime):
+        deadline_dt = deadline_str
     else:
-        # Конвертуємо ISO-формат у datetime
         try:
-            deadline_str = deadline_str.replace("T", " ")  # Convert "2025-02-07T10:00" -> "2025-02-07 10:00"
-            deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M:%S")  # Handle seconds
+            deadline_str = deadline_str.replace("T", " ")
+            deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M:%S")
         except ValueError:
-            deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")  # Fallback for no seconds
+            deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M")
 
     return Task(
         name=data["name"],
         duration=data["duration"],
-        deadline=deadline_dt.strftime("%Y-%m-%d %H:%M") if deadline_dt else None,  # Записуємо None у Task, якщо дедлайн відсутній
+        deadline=deadline_dt.strftime("%Y-%m-%d %H:%M") if deadline_dt else None,
         priority=data["priority"],
-        task_id=data.get("id")  # Extract ID if present
+        task_id=data.get("id")
     )
 
 def save_tasks(tasks):
     """
-    Save a list of tasks to the tasks JSON file.
+    Saves a list of tasks to the tasks JSON file.
 
     Args:
         tasks (list[Task]): The tasks to save.
@@ -87,7 +86,7 @@ def save_tasks(tasks):
 
 def save_schedule(schedule_date, tasks):
     """
-    Save a schedule by appending a new entry to the schedule history.
+    Saves a schedule by appending a new entry to the schedule history.
 
     Args:
         schedule_date (datetime): The date of the schedule.
@@ -98,7 +97,6 @@ def save_schedule(schedule_date, tasks):
         "tasks": [task_to_dict(task) for task in tasks]
     }
 
-    # Load existing schedules
     schedules = load_schedules()
     schedules.append(schedule_data)
 
@@ -110,7 +108,7 @@ def save_schedule(schedule_date, tasks):
 
 def save_completed_tasks(tasks):
     """
-    Save the list of completed tasks to a JSON file.
+    Saves the list of completed tasks to a JSON file.
 
     Args:
         tasks (list[Task]): List of completed tasks.
@@ -120,7 +118,7 @@ def save_completed_tasks(tasks):
 
 def load_tasks():
     """
-    Load tasks from the tasks JSON file and convert them into Task objects.
+    Loads tasks from the tasks JSON file and converts them into Task objects.
 
     Returns:
         list[Task]: List of tasks.
@@ -129,7 +127,7 @@ def load_tasks():
         with open(TASKS_FILE, "r") as f:
             data = json.load(f)
             tasks = [dict_to_task(d) for d in data]
-            assign_task_ids(tasks)  # Ensure tasks have unique IDs
+            assign_task_ids(tasks)
             return tasks
     except (FileNotFoundError, json.JSONDecodeError):
         print("⚠ Warning: tasks.json is empty or corrupted. Resetting task list.")
@@ -137,7 +135,7 @@ def load_tasks():
 
 def load_schedules():
     """
-    Load the list of saved schedules from the schedules JSON file.
+    Loads the list of saved schedules from the schedules JSON file.
 
     Returns:
         list: List of schedules.
@@ -154,7 +152,7 @@ def load_schedules():
 
 def load_completed_tasks():
     """
-    Load completed tasks from the completed tasks JSON file.
+    Loads completed tasks from the completed tasks JSON file.
 
     Returns:
         list[Task]: List of completed tasks.
@@ -162,9 +160,23 @@ def load_completed_tasks():
     try:
         with open(COMPLETED_TASKS_FILE, "r") as f:
             data = json.load(f)
-            return [dict_to_task(d) for d in data]  # Конвертуємо словники у Task-об'єкти
+            return [dict_to_task(d) for d in data]
     except (FileNotFoundError, json.JSONDecodeError):
-        return []  # Якщо файл не існує або пошкоджений, повертаємо порожній список 
+        return []
+
+import random
+
+def generate_task_id():
+    """Generates a unique 5-digit numeric ID for a task.
+
+    Returns:
+        int: A unique 5-digit task ID.
+    """
+    existing_ids = {task.id for task in load_tasks()}  # All existing task IDs
+    while True:
+        new_id = random.randint(10000, 99999)  # Generate a 5-digit ID
+        if new_id not in existing_ids:
+            return new_id
 
 def assign_task_ids(tasks):
     """
@@ -173,5 +185,8 @@ def assign_task_ids(tasks):
     Args:
         tasks (list): List of Task objects.
     """
-    for index, task in enumerate(tasks, start=1):
-        task.id = index
+    existing_ids = {task.id for task in tasks if task.id is not None}
+    
+    for task in tasks:
+        if task.id is None: 
+            task.id = generate_task_id()
