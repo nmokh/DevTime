@@ -5,7 +5,7 @@ from datetime import datetime
 
 from devtime.scheduler import Task, generate_schedule, WorkSchedule
 from devtime.storage import (
-    generate_task_id, save_tasks, load_tasks, save_schedule, load_schedules, 
+    generate_task_id, save_tasks, load_tasks, 
     load_completed_tasks, save_completed_tasks
 )
 from devtime.config import load_config, save_config, update_config
@@ -28,35 +28,31 @@ def parse_date(date_str):
     if isinstance(date_str, datetime):
         return date_str
 
-    if date_str is None or date_str.strip() == "" or date_str.strip().lower() == "none":
+    if not date_str or date_str.strip().lower() == "none":
         return None
 
     date_str = date_str.strip()
 
     if date_str.isdigit():
         full_date = f"{now.year}-{now.month:02d}-{int(date_str):02d}"
-        time_part = "23:59" 
-
+        time_part = "23:59"
     elif ":" in date_str and "-" not in date_str and " " not in date_str:
         full_date = now.strftime("%Y-%m-%d")
         time_part = date_str
-
     elif " " in date_str and date_str.split(" ")[0].isdigit():
         day_part, time_part = date_str.split(" ", 1)
         full_date = f"{now.year}-{now.month:02d}-{int(day_part):02d}"
-
     elif "-" in date_str:
         parts = date_str.split(" ")
         full_date = parse_date_part(parts[0], now)
         time_part = parts[1] if len(parts) > 1 else "23:59"
-
     else:
-        raise ValueError(f"Invalid date format: '{date_str}'. Expected formats: '10', '02-10', 'YYYY-MM-DD [HH:MM]', or 'HH:MM'.")
+        raise ValueError(f"Invalid date format: '{date_str}'.")
 
     try:
         return datetime.strptime(f"{full_date} {time_part}", "%Y-%m-%d %H:%M")
     except ValueError as e:
-        raise ValueError(f"Invalid date format: '{date_str}'. Expected formats: '10', '02-10', 'YYYY-MM-DD [HH:MM]', or 'HH:MM'. Error: {e}")
+        raise ValueError(f"Invalid date format: '{date_str}'. Error: {e}")
 
 def parse_date_part(date_part, now):
     """
@@ -69,15 +65,13 @@ def parse_date_part(date_part, now):
     Returns:
         str: The parsed date part in 'YYYY-MM-DD' format.
     """
-    if "-" not in date_part:  
-        if len(date_part) <= 2:  
+    if "-" not in date_part:
+        if len(date_part) <= 2:
             return f"{now.year}-{now.month:02d}-{int(date_part):02d}"
         else:
-            raise ValueError(f"Invalid date format: '{date_part}'. Expected 'MM-DD' or 'YYYY-MM-DD'.")
-    
+            raise ValueError(f"Invalid date format: '{date_part}'.")
     elif date_part.count("-") == 1:
         return f"{now.year}-{date_part}"
-    
     return date_part
 
 def parse_priority(priority_input):
@@ -101,7 +95,7 @@ def parse_add_args(args):
         args (list[str]): List of arguments passed in the command.
 
     Returns:
-        dict: Corrected arguments.
+        argparse.Namespace: Corrected arguments.
     """
     name = args[0]
     duration = args[1]
@@ -109,10 +103,10 @@ def parse_add_args(args):
     priority = "2"  # Default value (medium)
 
     if len(args) > 2:
-        if len(args) > 3 and ":" in args[3]: 
+        if len(args) > 3 and ":" in args[3]:
             deadline = f"{args[2]} {args[3]}"
             priority = args[4] if len(args) > 4 else priority
-        else: 
+        else:
             deadline = args[2]
             priority = args[3] if len(args) > 3 else priority
 
@@ -126,6 +120,9 @@ def parse_add_args(args):
 def add_task(args):
     """
     Handles adding a new task and saving it to storage.
+
+    Args:
+        args (Namespace): Command-line arguments containing task details.
     """
     tasks = load_tasks()
     task_id = generate_task_id()
@@ -144,47 +141,58 @@ def add_task(args):
 
 def delete_task(args):
     """
-    Deletes tasks by their IDs from active or completed lists. Supports "all" to delete all completed tasks.
+    Deletes one or multiple tasks from active or completed lists.
 
     Args:
-        args (Namespace): Command-line arguments containing task IDs and optional --completed flag.
+        args (Namespace): Command-line arguments containing task IDs or 'all'.
     """
     tasks = load_tasks()
     completed_tasks = load_completed_tasks()
 
-    # Convert IDs to integers (if not "all")
-    active_ids = list(map(int, args.active_ids)) if args.active_ids else []
-    completed_ids = [] if args.completed_ids is None else args.completed_ids
+    active_ids = getattr(args, "active_ids", getattr(args, "id", []))
+    completed_ids = getattr(args, "completed_ids", getattr(args, "completed", []))
 
-    # Delete from active tasks
-    if active_ids:
-        initial_count = len(tasks)
-        tasks = [task for task in tasks if task.id not in active_ids]
-        if len(tasks) < initial_count:
-            save_tasks(tasks)
-            print(f"✅ Deleted active tasks: {', '.join(map(str, active_ids))}.")
-        else:
-            print(f"⚠ No matching active tasks found for IDs: {', '.join(map(str, active_ids))}.")
+    if isinstance(active_ids, str):
+        active_ids = [active_ids]
+    if isinstance(completed_ids, str):
+        completed_ids = [completed_ids]
 
-    # Delete from completed tasks
-    if "all" in completed_ids:
-        confirm = input("⚠ Are you sure you want to delete all completed tasks? (yes/no): ").strip().lower()
-        if confirm == "yes" or confirm == "y":
-            save_completed_tasks([])
-            print("✅ All completed tasks have been deleted.")
+    if "all" in active_ids:
+        confirm = input("⚠ Are you sure you want to delete all active tasks? (yes/no): ").strip().lower()
+        if confirm in ("yes", "y"):
+            save_tasks([])
+            print("✅ All active tasks have been deleted successfully.")
         else:
             print("🚫 Operation canceled.")
         return
 
-    if completed_ids:
-        completed_ids = list(map(int, completed_ids))
-        initial_count = len(completed_tasks)
-        completed_tasks = [task for task in completed_tasks if task.id not in completed_ids]
-        if len(completed_tasks) < initial_count:
-            save_completed_tasks(completed_tasks)
-            print(f"✅ Deleted completed tasks: {', '.join(map(str, completed_ids))}.")
+    if "all" in completed_ids:
+        confirm = input("⚠ Are you sure you want to delete all completed tasks? (yes/no): ").strip().lower()
+        if confirm in ("yes", "y"):
+            save_completed_tasks([])
+            print("✅ All completed tasks have been deleted successfully.")
         else:
-            print(f"⚠ No matching completed tasks found for IDs: {', '.join(map(str, completed_ids))}.")
+            print("🚫 Operation canceled.")
+        return
+
+    try:
+        if active_ids:
+            task_ids = set(map(int, active_ids))
+            tasks = [task for task in tasks if task.id not in task_ids]
+            save_tasks(tasks)
+            print(f"✅ Successfully deleted active tasks: {', '.join(map(str, task_ids))}.")
+
+        if completed_ids:
+            completed_task_ids = set(map(int, completed_ids))
+            completed_tasks = [task for task in completed_tasks if task.id not in completed_task_ids]
+            save_completed_tasks(completed_tasks)
+            print(f"✅ Successfully deleted completed tasks: {', '.join(map(str, completed_task_ids))}.")
+
+        if not active_ids and not completed_ids:
+            print("⚠ No valid tasks specified for deletion.")
+
+    except ValueError:
+        print("⚠ Error: Task IDs must be numbers.")
 
 def edit_task(args):
     """
@@ -215,111 +223,95 @@ def edit_task(args):
 
 def complete_task(args):
     """
-    Marks one or multiple tasks as completed. Supports "all" to complete all tasks.
+    Marks one or multiple tasks as completed. Supports 'all' to complete all tasks.
 
     Args:
-        args (Namespace): Command-line arguments containing task IDs or "all".
+        args (Namespace): Command-line arguments containing task IDs or 'all'.
     """
     tasks = load_tasks()
     completed_tasks = load_completed_tasks()
 
-    if "all" in args.ids:
+    if args.id == "all":
         confirm = input("⚠ Are you sure you want to mark all tasks as completed? (yes/no): ").strip().lower()
-        if confirm == "yes" or "y":
+        if confirm in ("yes", "y"):
             completed_tasks.extend(tasks)
             save_completed_tasks(completed_tasks)
-            save_tasks([])
+            save_tasks([])  # Clear active tasks
             print("✅ All tasks have been marked as completed.")
         else:
             print("🚫 Operation canceled.")
         return
 
-    initial_count = len(tasks)
-    remaining_tasks = [task for task in tasks if task.id not in map(int, args.ids)]
-    completed_now = [task for task in tasks if task.id in map(int, args.ids)]
+    task_ids = args.id if isinstance(args.id, list) else [args.id]
+
+    remaining_tasks = [task for task in tasks if task.id not in map(int, task_ids)]
+    completed_now = [task for task in tasks if task.id in map(int, task_ids)]
 
     if not completed_now:
-        print(f"⚠ No matching tasks found for IDs: {', '.join(args.ids)}.")
+        print(f"⚠ No matching tasks found for IDs: {', '.join(map(str, task_ids))}.")
     else:
         completed_tasks.extend(completed_now)
         save_completed_tasks(completed_tasks)
         save_tasks(remaining_tasks)
-        print(f"✅ Successfully marked tasks as completed: {', '.join(args.ids)}.")
+        print(f"✅ Successfully marked tasks as completed: {', '.join(map(str, task_ids))}.")
 
 def plan_schedule(args):
     """
-    Generates an optimized schedule based on saved tasks and the work schedule.
-    The generated schedule is saved to storage and displayed in a formatted table.
+    Generates an optimized schedule for the current day.
 
     Args:
-        args: Command line arguments.
-    """
-    tasks = load_tasks()
-    today = datetime.today().strftime("%A")
-    schedule = WorkSchedule(today)
-    planned_tasks, remaining_tasks = generate_schedule(tasks, schedule)
-
-    # Save the generated schedule with the current date
-    schedule_date = datetime.now()
-    save_schedule(schedule_date, planned_tasks)
-
-    if planned_tasks:
-        headers = ["Task Name", "Duration", "Deadline"]
-        table_data = [
-            [task.name, f"{task.duration}h", task.deadline.strftime("%H:%M")] for task in planned_tasks
-        ]
-        print("\n┌──────────────────────────────────────────┐")
-        print("│            OPTIMIZED SCHEDULE            │")
-        print("└──────────────────────────────────────────┘\n")
-        print(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
-    else:
-        print("\n📅 No tasks scheduled for today.")
-
-    if remaining_tasks:
-        print("\n⚠ Some tasks couldn't fit into today’s schedule and will be postponed:")
-        for task in remaining_tasks:
-            print(f"- {task.name} ({task.duration}h, deadline: {task.deadline.strftime('%Y-%m-%d %H:%M')}, priority: {task.priority})")
-
-def view_history(args):
-    """
-    Displays the task history.
-
-    Args:
-        args: Command line arguments.
+        args (Namespace): Command-line arguments.
     """
     tasks = load_tasks()
     if not tasks:
-        print("No tasks found.")
+        print("⚠ No tasks available to schedule.")
+        return
+
+    schedule_plan, remaining_tasks = generate_schedule(tasks, None)
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    if today_str in schedule_plan:
+        daily_schedule = schedule_plan[today_str]
+        print("\n📅 Schedule for today (" + today_str + "):")
+        headers = ["ID", "Task Name", "Start Time", "End Time"]
+        table_data = [
+            [
+                str(item.id) if isinstance(item, Task) else "",
+                item.name if isinstance(item, Task) else "Break",
+                f"{int(start):02}:{int((start % 1) * 60):02}",
+                f"{int(end):02}:{int((end % 1) * 60):02}"
+            ]
+            for item, start, end in daily_schedule
+        ]
+        print(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
     else:
-        print("Task History:")
-        for task in tasks:
-            print(task)
+        print("\n📅 No schedule generated for today.")
+
+    if remaining_tasks:
+        print("\n⚠ The following tasks could not be scheduled today:")
+        for task in remaining_tasks:
+            print(f"- {task.name} (ID: {task.id}, remaining duration: {task.duration}h)")
+
+def view_history(args):
+    """
+    Displays the task history (placeholder).
+
+    Args:
+        args (Namespace): Command-line arguments.
+    """
+    print("⚠ Feature under development. Coming soon!")
 
 def view_schedule(args):
     """
-    Displays the last saved schedule.
+    Displays the last saved schedule (placeholder).
 
     Args:
-        args: Command line arguments.
+        args (Namespace): Command-line arguments.
     """
-    schedules = load_schedules()
-    
-    if not schedules:
-        print("⚠ No saved schedules found.")
-        return
-
-    # Display the most recent schedule
-    last_schedule = schedules[-1]
-    print(f"\n📅 Schedule for {last_schedule['date']}:")
-    table = [
-        [task["name"], f"{task['duration']}h", task["deadline"].split("T")[1]] 
-        for task in last_schedule["tasks"]
-    ]
-    print(tabulate(table, headers=["Task Name", "Duration", "Deadline"], tablefmt="grid"))
+    print("⚠ Feature under development. Coming soon!")
 
 def interactive_mode():
     """Runs the interactive CLI mode, allowing users to enter commands in a loop."""
-    
     print("\nWelcome to DevTime interactive mode!")
     print("Type a command or 'help' to see available commands.")
     print("-" * 50)
@@ -330,6 +322,7 @@ def interactive_mode():
         if command in ["q", "exit", "quit"]:
             print("Exiting interactive mode. Goodbye!")
             break
+
         elif command == "help":
             print("\nAvailable commands:")
             print("  add        - Add a new task")
@@ -341,25 +334,24 @@ def interactive_mode():
             print("  complete   - Mark a task as completed")
             print("  exit       - Exit interactive mode")
             print("-" * 50)
+
         elif command.startswith("add"):
             try:
-                parts = shlex.split(command)
-                args = parts[1:]
+                parts = shlex.split(command)[1:]
 
-                name = args[0] if len(args) > 0 else input("Task name: ").strip()
-                duration = args[1] if len(args) > 1 else input("Duration (in hours, e.g., 1.5): ").strip()
-                deadline = args[2] if len(args) > 2 else input("Deadline (YYYY-MM-DD HH:MM, leave empty for none): ").strip()
-                priority = args[3] if len(args) > 3 else input("Priority (1=high, 2=medium, 3=low, leave empty for medium): ").strip()
+                if len(parts) < 2:
+                    name = input("Task name: ").strip()
+                    duration = input("Duration (in hours, e.g., 1.5): ").strip()
+                    deadline = input("Deadline (YYYY-MM-DD HH:MM, leave empty for none): ").strip()
+                    priority = input("Priority (1=high, 2=medium, 3=low, leave empty for medium): ").strip()
+                    parts = [name, duration, deadline, priority]
 
-                duration = float(duration)
-                deadline = parse_date(deadline) if deadline else None
-                priority_map = {"1": "high", "2": "medium", "3": "low", "high": "high", "medium": "medium", "low": "low"}
-                priority = priority_map.get(priority, "medium")
-
-                add_task(argparse.Namespace(name=name, duration=duration, deadline=deadline, priority=priority))
+                args = parse_add_args(parts)
+                add_task(args)
 
             except ValueError as e:
                 print(f"⚠ Error: {e}")
+
         elif command == "edit":
             task_id = int(input("Task ID: ").strip())
             name = input("New name (leave empty to keep current): ").strip()
@@ -379,58 +371,120 @@ def interactive_mode():
             ))
 
         elif command.startswith("delete"):
-            parts = command.split()
-            
-            if len(parts) > 1:
-                try:
-                    task_id = int(parts[1])
-                    delete_task(argparse.Namespace(id=task_id))
-                except ValueError:
-                    print("⚠ Invalid task ID. Please enter a number.")
+            parts = command.split()[1:]
+
+            if not parts:
+                task_id = input("Task ID to delete: ").strip()
+                parts = [task_id]
+
+            delete_active = False
+            delete_completed = False
+            ids = []
+            completed_ids = []
+
+            if parts == ["all", "--completed", "all"]:
+                delete_task(argparse.Namespace(active_ids=["all"], completed=False))
+                delete_task(argparse.Namespace(active_ids=[], completed=True, completed_ids=["all"]))
+                return
+
+            for part in parts:
+                if part == "all":
+                    delete_active = True
+                elif part == "--completed":
+                    delete_completed = True
+                else:
+                    try:
+                        ids.append(int(part))
+                    except ValueError:
+                        print(f"⚠ Invalid task ID: {part}")
+
+            if delete_active:
+                delete_task(argparse.Namespace(id="all", completed=False))
+            if delete_completed:
+                delete_task(argparse.Namespace(id="all", completed=True))
+            if ids:
+                delete_task(argparse.Namespace(id=ids, completed=False))
+
+        elif command.startswith("complete"):
+            parts = command.split()[1:]
+
+            if not parts:
+                task_id = input("Task ID to complete: ").strip()
+                parts = [task_id]
+
+            if parts == ["all"]:
+                complete_task(argparse.Namespace(id="all"))
             else:
-                try:
-                    task_id = int(input("Task ID: ").strip())
-                    delete_task(argparse.Namespace(id=task_id))
-                except ValueError:
-                    print("⚠ Invalid task ID. Please enter a number.")
-        elif command == "complete":
-            task_id = int(input("Task ID: ").strip())
-            complete_task(argparse.Namespace(id=task_id))
+                ids = []
+
+                for part in parts:
+                    try:
+                        ids.append(int(part))
+                    except ValueError:
+                        print(f"⚠ Invalid task ID: {part}")
+
+                if ids:
+                    complete_task(argparse.Namespace(id=ids))
+
         elif command == "plan":
-            plan_schedule(None)
+            today = datetime.today().strftime("%A")
+            plan_schedule(argparse.Namespace(day_of_week=today))
+
         elif command == "schedule":
             view_schedule(None)
+
         elif command == "history":
             view_history(None)
+
         else:
             print("⚠ Invalid command. Type 'help' to see available commands.")
 
 def view_config(args):
-    """Displays the current user configuration."""
+    """
+    Displays the current user configuration.
+
+    Args:
+        args (Namespace): Command-line arguments.
+    """
     config = load_config()
     print("\n🔧 User Configuration:")
     for key, value in config.items():
         print(f"{key}: {value}")
 
 def update_work_hours(args):
-    """Updates working hours for a specific day."""
+    """
+    Updates working hours for a specific day.
+
+    Args:
+        args (Namespace): Command-line arguments.
+    """
     config = load_config()
-    
+
     if args.start.lower() == "none":
         config["work_hours"][args.day] = {"start": None, "end": None}
     else:
         config["work_hours"][args.day] = {"start": int(args.start), "end": int(args.end)}
-    
+
     save_config(config)
     print(f"✅ Updated working hours for {args.day}.")
 
 def update_concentration(args):
-    """Updates max concentration hours."""
+    """
+    Updates max concentration hours.
+
+    Args:
+        args (Namespace): Command-line arguments.
+    """
     update_config("max_concentration_hours", float(args.hours))
     print(f"✅ Updated max concentration hours to {args.hours}h.")
 
 def update_break(args):
-    """Updates minimum break time."""
+    """
+    Updates minimum break time.
+
+    Args:
+        args (Namespace): Command-line arguments.
+    """
     update_config("min_break_minutes", int(args.minutes))
     print(f"✅ Updated minimum break to {args.minutes} minutes.")
 
@@ -481,16 +535,16 @@ def main():
     complete_parser.set_defaults(func=complete_task)
 
     # "plan" command: Generate an optimized schedule
-    plan_parser = subparsers.add_parser("plan", help="Generate optimized schedule")
+    plan_parser = subparsers.add_parser("plan", help="Generate an optimized work schedule")
     plan_parser.set_defaults(func=plan_schedule)
 
     # "history" command: View task history
-    history_parser = subparsers.add_parser("history", help="View task history")
-    history_parser.set_defaults(func=view_history)
+    history_parser = subparsers.add_parser("history", help="View task history (Coming soon!)")
+    history_parser.set_defaults(func=lambda args: print("⚠ Feature under development. Coming soon!"))
 
-    # "schedule" command: View last saved schedule
-    schedule_parser = subparsers.add_parser("schedule", help="View last saved schedule")
-    schedule_parser.set_defaults(func=view_schedule)
+    # "schedule" command: View a saved schedule
+    schedule_parser = subparsers.add_parser("schedule", help="View last saved schedule (Coming soon!)")
+    schedule_parser.set_defaults(func=lambda args: print("⚠ Feature under development. Coming soon!"))
 
     # "config" command: View or change user settings
     config_parser = subparsers.add_parser("config", help="View or change user settings")
@@ -516,15 +570,14 @@ def main():
     args = parser.parse_args()
 
     if args.command == "add":
-
         deadline = None
-        priority = args.priority 
+        priority = args.priority
 
         if isinstance(args.deadline, list):
-            args.deadline = [d.strip() for d in args.deadline if d.strip()] 
+            args.deadline = [d.strip() for d in args.deadline if d.strip()]
 
         if args.deadline:
-            if len(args.deadline) == 1: 
+            if len(args.deadline) == 1:
                 deadline = args.deadline[0]
             elif len(args.deadline) == 2 and " " not in args.deadline[0]:
                 if ":" in args.deadline[1]:
@@ -532,12 +585,12 @@ def main():
                 else:
                     deadline = f"{args.deadline[0]}"
                     priority = args.deadline[1]
-            elif len(args.deadline) == 2 and " " in args.deadline[0]: 
+            elif len(args.deadline) == 2 and " " in args.deadline[0]:
                 deadline = f"{args.deadline[0]}"
                 priority = args.deadline[1]
-            elif len(args.deadline) > 2:  
+            elif len(args.deadline) > 2:
                 deadline = f"{args.deadline[0]} {args.deadline[1]}"
-                priority = args.deadline[2] 
+                priority = args.deadline[2]
 
         if not deadline:
             deadline = None

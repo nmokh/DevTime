@@ -89,22 +89,23 @@ def save_schedule(schedule_date, tasks):
     Saves a schedule by appending a new entry to the schedule history.
 
     Args:
-        schedule_date (datetime): The date of the schedule.
-        tasks (list[Task]): The tasks included in the schedule.
+        schedule_date (str): The date of the schedule in "YYYY-MM-DD" format.
+        tasks (list[tuple]): A list of tuples containing (Task, start_time, end_time).
     """
+    schedules = load_schedules()
+
     schedule_data = {
-        "date": schedule_date.strftime("%Y-%m-%d"),
-        "tasks": [task_to_dict(task) for task in tasks]
+        "date": schedule_date,  # Already a string, no need for strftime
+        "tasks": [task_to_dict(task) for task, _, _ in tasks]  # Convert tasks to dict
     }
 
-    schedules = load_schedules()
     schedules.append(schedule_data)
 
     try:
         with open(SCHEDULES_FILE, "w") as f:
             json.dump(schedules, f, indent=4)
     except IOError as e:
-        print(f"Error saving schedule: {e}")
+        print(f"⚠ Error saving schedule: {e}")
 
 def save_completed_tasks(tasks):
     """

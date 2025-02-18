@@ -18,7 +18,7 @@ DEFAULT_CONFIG = {
 }
 
 def load_config():
-    """Loads the user configuration from the file."""
+    """Loads the user configuration from the file. If the file does not exist, saves the default configuration."""
     if not os.path.exists(CONFIG_FILE):
         save_config(DEFAULT_CONFIG)
     
