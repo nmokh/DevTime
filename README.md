@@ -36,8 +36,8 @@ DevTime — це інтелектуальний планувальник зав�
 
 1. **Clone the repository / Клонуйте репозиторій:**
     ```bash
-    git clone https://github.com/nmokh/DevTime.git
-    cd DevTime
+    git clone https://github.com/nmokh/devtime.git
+    cd devtime
     ```
 
 2. **Create a virtual environment (recommended) / Створіть віртуальне середовище (рекомендовано):**
